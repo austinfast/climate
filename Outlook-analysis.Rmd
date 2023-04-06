@@ -1,0 +1,936 @@
+---
+title: "outlook-analysis"
+output: html_document
+date: "2023-04-05"
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(lubridate)
+library(beepr)
+library(data.table)
+library(tictoc)
+library(tidytext)
+```
+
+
+
+```{r}
+archive <- data.table::fread("C:/Users/afast/Documents/Outlook Files/afast-archive.csv")
+deleted <- data.table::fread("C:/Users/afast/Documents/Outlook Files/afast-deleted.csv")
+inbox <- data.table::fread("C:/Users/afast/Documents/Outlook Files/afast-inbox.csv")
+nprcomm <- data.table::fread("C:/Users/afast/Documents/Outlook Files/afast-nprcomm.csv")
+
+emails <- rbind (archive, deleted, inbox, nprcomm) %>%
+  clean_names()
+
+climate <- emails %>%
+  filter (str_detect(body, regex("climate", ignore_case=TRUE)))
+
+
+list <- c("climate brief", "climate note")
+c_briefs <- climate %>%
+  filter (str_detect(subject, regex(paste(list, collapse="|"), ignore_case=TRUE)))
+
+
+emails1 <-readxl::read_excel("/Users/austinfast/Downloads/Mail-backup.xlsx", 
+                             sheet=1) %>%
+  clean_names()
+emails2 <-readxl::read_excel("C:/Users/afast/Documents/Outlook Files/Mail-backup.xlsx", 
+                             sheet=2) %>%
+  clean_names()
+compare <- compare_df_cols(emails1,emails2)
+
+list <- c("climate brief", "climate note")
+climate2 <- emails1 %>%
+  filter (str_detect(body_text_body, regex("climate", ignore_case=TRUE)))
+c_briefs2 <- climate2 %>%
+  filter (str_detect(subject, regex(paste(list, collapse="|"), ignore_case=TRUE)))
+
+write_csv (c_briefs3, "C:/Users/afast/Documents/Outlook Files/climate_briefs.csv")
+```
+
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readr)
+library(dplyr) # SQL-style data processing
+library(tidytext) # text analysis in R
+library(stringr) # working with text strings
+library(lubridate) # working with times and dates
+library(jsonlite) # reading and writing JSON
+library(tidyr) # data reshaping
+
+#Remove names
+stop <- c("Neela", "Banerjee", "Babits", "Sadie", "Andrea", "Kissack", "Jeff Brady",
+          "Planner details:", "Planner details here:", "https://newsflexbeta.npr.org/app/cardboard/251/", "Good morning, everyone", "Good morning, NPR", "Good morning, ", "For all story queries, please contact editors Neela Banerjee or Sadie Babits via email here:", "climate-eds@npr.org", "Neela Banerjee", "Deputy Supervising Climate Editor", "NPR", "nbanerjee@npr.org", "M: 202 297 9915", "Twitter: @neelaeast", "reporter", "editor", "npr.org", "mailto", "Julia Simon", "Rebecca Hersher", "Reporter", "Editor", "Short Wave", "Ryan Kellman", "Ramirez Franco", "story queries")
+
+c_briefs3 <- c_briefs2 %>%
+  mutate (body=body_text_body) %>%
+  separate (body_text_body, into=c("x1", "today"), sep="Today") %>%
+  separate (body, into=c("x2", "upcoming"), sep="Upcoming")
+  mutate (body_text_body = str_remove_all(body_text_body, paste(stop, collapse = "|"))) 
+
+#73 have upcoming
+c_briefs3 %>% 
+  filter (!is.na(upcoming))
+#61 have today
+c_briefs3 %>% 
+  filter (!is.na(today))
+
+c_briefs2 <- c_briefs2 %>%
+  mutate (body_text_body = str_remove_all(body_text_body, paste(stop, collapse = "|"))) 
+
+replace_reg <- "https?://[^\\s]+|&amp;|&lt;|&gt;|\bRT\\b"
+
+# regex for parsing tweets
+# split into word rows
+c_briefs3 <- c_briefs2 %>%
+  mutate(body_text_body = str_replace_all(body_text_body, replace_reg, "")) %>%
+  unnest_tokens(word, body_text_body, token = "words") #went from 89018 to 69163
+
+c_words <- c_briefs3 %>%
+  anti_join(stop_words, by="word") %>%  #went from 69163 to 37401
+  filter(!str_detect(word, "http")) %>%
+  filter(!str_detect(word, "t.co")) %>% #removed an additional 50 words
+  filter(!grepl("@",word) & word != "@") #went to 33117 
+
+c_bigrams <- c_briefs2 %>% 
+    filter(substring(body_text_body,1,4) != "http" & substring(body_text_body,1,2) != "RT") %>%
+  mutate(text = str_replace_all(body_text_body, replace_reg, "")) %>%
+  unnest_tokens(bigram, body_text_body, token = "ngrams", n = 2) #kept returning error until added the collapse=FALSE statement
+
+c_bigrams <- c_bigrams %>%
+  separate(bigram, into = c("first","second"), sep = " ", remove = FALSE) %>%
+  anti_join(stop_words, by = c("first" = "word")) %>%
+  anti_join(stop_words, by = c("second" = "word")) %>%
+  filter(str_detect(first, "[a-z]") &
+         str_detect(second, "[a-z]")) %>% 
+  filter(!str_detect(bigram, "http")) %>%
+  filter(!str_detect(bigram, "t.co"))  #Reduced bigrams from 81366 to 15936
+
+
+c_trigrams <- c_briefs2 %>% 
+  filter(substring(body_text_body,1,4) != "http" & substring(body_text_body,1,2) != "RT") %>%
+  mutate(text = str_replace_all(body_text_body, replace_reg, "")) %>%
+  unnest_tokens(bigram, body_text_body, token = "ngrams", n = 3) %>%
+  separate(bigram, into = c("first","second", "third"), sep = " ", remove = FALSE) %>%
+  anti_join(stop_words, by = c("first" = "word")) %>%
+  anti_join(stop_words, by = c("second" = "word")) %>%
+  anti_join(stop_words, by = c("third" = "word")) %>%
+  filter(str_detect(first, "[a-z]") &
+         str_detect(second, "[a-z]") &
+         str_detect(third, "[a-z]")) %>% 
+  filter(!str_detect(bigram, "http")) %>%
+  filter(!str_detect(bigram, "t.co"))  #Reduced bigrams from 81366 to 15936
+
+words_count <- c_words %>%
+  group_by(word) %>%
+  count() %>%
+  arrange(-n) %>%
+  print
+
+bigrams_count <- c_bigrams %>%
+  group_by(bigram) %>%
+  count() %>%
+  arrange(-n) %>%
+  filter (!bigram %in% c("climate climate", "desk climate", "climate solution", "climate solutions", "digital stub", "ramirez franco", "atc digital", "digital stories", "tbd digital", "climate desk", "digital story", "lauren sommer", "stories coming", "michael copley", "margaret cirino", "nate rott")) %>%
+  print 
+
+#GRAPH CLEANED BIGRAMS!
+q <- bigrams_count %>%
+  head(25)
+  
+ggplot(data=q, aes(x=fct_reorder(bigram, n), y=n)) +
+  geom_bar(stat="identity") + coord_flip() + 
+  labs(title="Top 25 word pairs from NPR's climate briefs (Oct. 2022-April 2023)", x="Word Pairs", y="Count")
+
+
+words_by_time_whole %>%
+  inner_join (q, by=c("word"="bigram")) %>%
+  mutate (time_floor=as.character(time_floor)) %>%
+  ggplot(aes(x=fct_reorder(word, count), y=count)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  facet_wrap(~time_floor) #+
+  labs(title="Top 25 word pairs from NPR's climate briefs (Oct. 2022-April 2023)", x="Word Pairs", y="Count")
+  
+words_by_time_whole %>%
+  inner_join (q, by=c("word"="bigram")) %>%
+  mutate (time_floor=as.character(time_floor)) %>%
+  ggplot(aes(x=time_floor, y=count, group=word, color=word)) +
+  geom_line(size = 1.3) 
+  geom_line() + 
+  coord_flip() + 
+  facet_wrap(~time_floor) #+
+  labs(title="Top 25 word pairs from NPR's climate briefs (Oct. 2022-April 2023)", x="Word Pairs", y="Count")  
+```
+
+
+
+
+
+```{r}
+remove_reg <- "&amp;|&lt;|&gt;"
+c_briefs4 <- c_briefs3 %>% 
+  #mutate(text = str_remove_all(full_text, remove_reg)) %>%
+  #unnest_tokens(word, full_text, token = "tweets") %>%
+  filter(!word %in% stop_words$word,
+         !word %in% str_remove_all(stop_words$word, "'"),
+         str_detect(word, "[a-z]"))
+#results in 18277 words
+
+frequency <- c_briefs4 %>% 
+  count(word, sort = TRUE) %>%
+  mutate(freq = n/17904)
+
+frequency
+
+words_by_time_whole <- c_briefs4 %>%
+  filter(!str_detect(word, "^@")) %>%
+  mutate(time_floor = floor_date(date_time_sent, unit = "1 month")) %>%
+  count(time_floor, word) %>%
+  group_by(time_floor) %>%
+  mutate(time_total = sum(n)) %>%
+  group_by(word) %>%
+  mutate(word_total = sum(n)) %>%
+  ungroup() %>%
+  rename(count = n) %>%
+  filter(word_total > 15)
+
+words_by_time_whole
+
+nested_data_whole <- words_by_time_whole %>%
+  nest(-word) 
+
+library(purrr)
+
+nested_models_whole <- nested_data_whole %>%
+  mutate(models = map(data, ~ glm(cbind(count, time_total) ~ time_floor, ., 
+                                  family = "binomial")))
+
+library(broom)
+
+slopes_whole <- nested_models_whole %>%
+  mutate(models = map(models, tidy)) %>%
+  unnest(cols = c(models)) %>%
+  filter(term == "time_floor") %>%
+  mutate(adjusted.p.value = p.adjust(p.value))
+
+top_slopes_whole <- slopes_whole %>% 
+  filter(adjusted.p.value < 0.05)
+
+top_slopes_whole
+
+words_by_time_whole$time_floor <- as.Date(words_by_time_whole$time_floor) #sets up the proper timestamp to graph Tweet frequency in the next step
+
+words25 <- words_count %>%
+  filter (!word %in% c("digital", "email", "atc", "desk", "tbd", "contact", "week", "upcoming", "brady", "spot", "radio", "editing", "report", "2", "sommer", "audio", "rott", "11")) %>%
+  head (25)
+
+words_by_time_whole %>%
+  filter (time_floor < as.Date("2023-04-01")) %>%
+  inner_join(words25, by = "word") %>%
+  inner_join(top_slopes_whole, by = "word") %>%
+  ggplot(aes(time_floor, count/time_total, color = word)) +
+  geom_line(size = 1.3) +
+  labs(x = NULL, y = "Word frequency") +
+        scale_x_date(date_breaks = "months" , date_labels = "%b %y")
+```
+
+
+GRAPH BIGRAM FREQUENCY OVER TIME
+```{r}
+words_by_time_whole <- join_bigrams %>%
+  filter (!bigram %in% c("climate climate", "desk climate", "climate solution", "climate solutions", "digital stub", "ramirez franco", "atc digital", "digital stories", "tbd digital", "climate desk", "digital story", "lauren sommer", "stories coming", "michael copley", "margaret cirino", "nate rott")) %>%
+  rename (word=bigram) %>%
+  mutate(time_floor = floor_date(date_time_sent, unit = "1 month")) %>%
+  count(time_floor, word) %>%
+  group_by(time_floor) %>%
+  mutate(time_total = sum(n)) %>%
+  group_by(word) %>%
+  mutate(word_total = sum(n)) %>%
+  ungroup() %>%
+  rename(count = n) %>%
+  filter(word_total > 15)
+
+words_by_time_whole
+
+nested_data_whole <- words_by_time_whole %>%
+  nest(-word) 
+
+library(purrr)
+
+nested_models_whole <- nested_data_whole %>%
+  mutate(models = map(data, ~ glm(cbind(count, time_total) ~ time_floor, ., 
+                                  family = "binomial")))
+
+library(broom)
+
+slopes_whole <- nested_models_whole %>%
+  mutate(models = map(models, tidy)) %>%
+  unnest(cols = c(models)) %>%
+  filter(term == "time_floor") %>%
+  mutate(adjusted.p.value = p.adjust(p.value))
+
+top_slopes_whole <- slopes_whole %>% 
+  filter(adjusted.p.value < 0.05)
+
+top_slopes_whole
+
+words_by_time_whole$time_floor <- as.Date(words_by_time_whole$time_floor) #sets up the proper timestamp to graph Tweet frequency in the next step
+
+#GRAPH CLEANED BIGRAMS!
+q <- bigrams_count %>%
+  head(20)
+words_by_time_whole %>%
+  filter (time_floor < as.Date("2023-04-01")) %>%
+  inner_join(q, by = c("word"="bigram")) %>%
+  ggplot(aes(time_floor, count/time_total, color = word)) +
+  geom_line(size = 1.3) +
+  labs(x = NULL, y = "Word frequency") +
+        scale_x_date(date_breaks = "months" , date_labels = "%b %y")
+```
+
+
+
+SCRAPE NPR CLIMATE STORIES
+```{r}
+library(rvest)
+library(httr)
+
+climate <- html_session("https://www.npr.org/sections/climate/archive")
+html <- content(climate$response)
+
+#LINKS FOR FIRST PAGE
+html2 <- html %>%
+  html_nodes ("h2") %>%
+  html_nodes ("a") %>%
+  html_attr('href')
+
+html2 <- html %>%
+  html_nodes ("a") %>%
+  html_text()
+
+search <- GET(url = "https://www.npr.org/sections/climate/archive",
+             config = httr::add_headers(.headers=headers))
+
+
+
+page2 <- "https://www.npr.org/sections/climate/archive?date=3-31-2023"
+
+library(wdman)
+
+#Alt2: didn't work
+##rD <- rsDriver(browser = "firefox", port=netstat::free_port(), verbose=F) #, chromever= "97.0.4692.36"
+#Alt3: works?>> https://stackoverflow.com/questions/73068560/how-to-get-a-table-from-power-bi-dashboard-using-web-scraping-in-r/73130938#73130938
+selServ <- selenium(
+  port = 4444L,
+  version = 'latest',
+  chromever = '103.0.5060.134', # set to available
+  #chromever = '109.0.5414.87'
+)
+
+remDr <- remoteDriver(
+  remoteServerAddr = 'localhost',
+  port = 4444L,
+  browserName = 'firefox'
+)
+
+Sys.sleep(5)
+
+remDr$open()
+
+#OLD VERSION THAT STOPPED WORKING IN JAN 2023============|
+#rD <- rsDriver(browser = "firefox", port=5559L, verbose=F) #, chromever= "97.0.4692.36"
+#remDr <- rD[["client"]]
+
+page2 <- paste0("https://www.npr.org/sections/climate/archive?date=", format(Sys.Date(), format="%m-%d-%Y"))
+
+remDr$navigate(page2)
+
+Sys.sleep(5)
+
+
+source <- remDr$getPageSource()[[1]]
+
+#Scroll until September comes into view
+while (!str_detect(source, "datetime=\"2022-09-29\"")){
+  webElem <- remDr$findElement("css", "body")
+
+  webElem$sendKeysToElement(list(key = "down_arrow"))
+  Sys.sleep(1)
+  source <- remDr$getPageSource()[[1]]
+}
+
+## read in the page source
+page <- read_html(source)
+
+#LINKS FOR FIRST PAGE
+links <- page %>%
+  html_nodes ("h2") %>%
+  html_nodes ("a") %>%
+  html_attr('href') %>%
+  as.data.frame() %>%
+  magrittr::set_colnames("url")
+
+headline <- page %>%
+  html_nodes ("h2") %>%
+  html_nodes ("a") %>%
+  html_text() %>%
+  as.data.frame() %>%
+  magrittr::set_colnames("headline")
+
+#2 failed to parse = short wave episodes
+date <- links %>%
+  mutate (date = str_remove_all(url, "^https://www.npr.org/")) %>%
+  mutate (date = str_remove_all(date, "^sections/goatsandsoda/")) %>%
+  mutate (date = str_remove_all(date, "^sections/pictureshow/")) %>%
+  mutate (date = str_remove_all(date, "^sections/health-shots/")) %>%
+  mutate (date = ymd(substr(date,1,10)))
+
+date %>%
+  filter (!str_detect(date, "[0-9]"))
+
+#Create list of articles to pull
+df <- cbind (date, headline) %>%
+  filter (date > as.Date('2022-09-30'))
+
+remDr$navigate(link)
+source <- remDr$getPageSource()[[1]]
+
+
+#LINKS FOR FIRST PAGE
+html2 <- read_html(source) %>%
+  html_nodes(xpath="//*[@class='transcript storytext']") %>%
+  html_text() %>%
+  str_remove_all("(\\b[A-Z]+ *\\b[:]*){2,}") %>% #remove two words in all caps that may or may not have a space after them (names, ambi)
+  str_remove_all ("[, ]*[A-Z]+:") %>% #remove words with a colon after them (, BYLINE:, HOST:, etc.)
+  str_remove_all ("\\(\\)") %>%
+  str_squish()
+  
+#Delete what's after copyright
+
+html2 <- html2 %>%
+  str_split ("Copyright ©")
+
+#Keep only before copyright notice
+html2 <- html2[[1]][[1]]
+
+byline <- read_html(source) %>%
+  html_nodes(xpath="//*[@id='storybyline']/div/div/div/p") %>%
+  html_text() %>%
+  str_squish()
+  
+output <- tibble()
+for (i in 1:length(df$url)){
+#for (i in 1:20){
+  #i <- 9
+  link <- df$url[i]
+  #page <- html_session(link)
+  #html <- content(page$response)
+
+  remDr$navigate(link)
+  Sys.sleep(4)
+  
+  source <- remDr$getPageSource()[[1]]
+  html <- read_html(source)
+  done=0
+  
+  #Pull body of story (DACS Transcript)
+  if (length(html %>%
+    html_nodes(xpath="//*[@class='transcript storytext']") %>%
+    html_text()) > 0){
+    
+      html2 <- html %>%
+        html_nodes(xpath="//*[@class='transcript storytext']") %>%
+        html_text() %>%
+        str_remove_all("(\\b[A-Z]+ *\\b[:]*){2,}") %>% #remove two words in all caps that may or may not have a space after them (names, ambi)
+        str_remove_all ("[, ]*[A-Z]+:") %>% #remove words with a colon after them (, BYLINE:, HOST:, etc.)
+        str_remove_all ("\\(\\)") %>%
+        str_remove_all ("A MARTÍNEZ") %>%
+        str_squish()
+        
+      #Delete what's after copyright
+      html2 <- html2 %>%
+        str_split ("Copyright ©")
+      
+      #Keep only before copyright notice
+      html2 <- html2[[1]][[1]]
+      
+      done = 1
+  }
+  
+  #Pull story if DACS isn't there
+  #if (length(html %>%
+  #    html_nodes(xpath="//*[@class='story']") %>%
+  #    html_text()) > 0){
+  if (done==0){
+
+      html2 <- html %>%
+        html_nodes(xpath="//*[@id='storytext']") %>%
+        html_nodes("p") %>%
+        #html_nodes("p>:not(xpath='//*[@class='credit-caption']") %>%
+#        html_attrs(">:not(xpath='//*[@class='credit-caption']')") %>%
+        html_text() %>%
+        str_remove_all("(\\b[A-Z]+ *\\b[:]*){2,}") %>% #remove two words in all caps that may or may not have a space after them (names, ambi)
+        str_remove_all ("[, ]*[A-Z]+:") %>% #remove words with a colon after them (, BYLINE:, HOST:, etc.)
+        str_remove_all ("\\(\\)") %>%
+        str_remove_all ("A MARTÍNEZ") %>%
+        str_remove_all ("Enlarge this image") %>%
+        as.character %>%
+        str_squish() %>%
+        toString 
+        
+    #Delete what's after copyright
+      html2 <- html2 %>%
+        str_split ("More Stories From")
+      
+      #Keep only before copyright notice
+      html2 <- html2[[1]][[1]]
+  
+  }
+  
+  check <- length(html2)
+  if (check<1){
+    stop ("ERROR")
+  }
+  
+  #Pull byline
+  byline <- html %>%
+    html_nodes(xpath="//*[@id='storybyline']/div/div/div/p") %>%
+    html_text() %>%
+    str_squish() %>%
+    toString()
+  
+  #Pull slug
+  slug <- html %>%
+    html_node(xpath="//h3[@class='slug']") %>%
+    html_text() %>%
+    str_squish() %>%
+    toString()
+    
+  #Save to dataframe
+  this_row <- tibble(byline=byline, body=html2, slug=slug)
+  output <- bind_rows (output, this_row)
+  rm(this_row, byline, html2, html, source, done, slug, check)
+}
+
+join <- cbind (df, output)
+
+write_csv (join, "npr_scrape.csv")
+
+```
+
+
+START HERE !! 4/6/23
+```{r}
+
+join <- read_csv("npr_scrape.csv")
+#how are these categorized?
+join %>% 
+  count (slug) %>%
+  arrange (desc(n))
+
+join2 <- join %>%
+  unnest_tokens(word, body, token = "words") #went from 89018 to 69163
+
+join_words <- join2 %>%
+  anti_join(stop_words, by="word") %>%  #went from 69163 to 37401
+  filter(!str_detect(word, "http")) %>%
+  filter(!str_detect(word, "t.co")) %>% #removed an additional 50 words
+  filter(!grepl("@",word) & word != "@") #went to 33117 
+
+#Remove URLs
+replace_reg <- "https?://[^\\s]+|&amp;|&lt;|&gt;|\bRT\\b"
+
+join_bigrams <- join %>% 
+    filter(substring(body,1,4) != "http" & substring(body,1,2) != "RT") %>%
+  mutate(text = str_replace_all(body, replace_reg, "")) %>%
+  unnest_tokens(bigram, body, token = "ngrams", n = 2) #kept returning error until added the collapse=FALSE statement
+
+join_bigrams <- join_bigrams %>%
+  separate(bigram, into = c("first","second"), sep = " ", remove = FALSE) %>%
+  anti_join(stop_words, by = c("first" = "word")) %>%
+  anti_join(stop_words, by = c("second" = "word")) %>%
+  filter(str_detect(first, "[a-z]") &
+         str_detect(second, "[a-z]")) %>% 
+  filter(!str_detect(bigram, "http")) %>%
+  filter(!str_detect(bigram, "t.co"))  #Reduced bigrams from 81366 to 15936
+
+words_count <- join_words %>%
+  group_by(word) %>%
+  count() %>%
+  arrange(-n) %>%
+  print
+
+bigrams_count <- join_bigrams %>%
+  group_by(bigram) %>%
+  summarize (count = n(),
+          stories = n_distinct(url)) %>%
+  arrange(-count) %>%
+  filter (!bigram %in% c("hide caption", "desk climate", "climate solution", "climate solutions", "digital stub", "ramirez franco", "atc digital", "digital stories", "tbd digital", "climate desk", "digital story", "lauren sommer", "stories coming", "michael copley", "margaret cirino", "nate rott", "npr hide", "getty images", "images hide", "ap hide", "npr news", "ryan kellman", "kellman npr", "apple podcasts", "npr's climate")) %>%
+  print 
+
+#GRAPH CLEANED BIGRAMS!
+q <- bigrams_count %>%
+  head(25)
+  
+graph <- ggplot(data=q, aes(x=fct_reorder(bigram, count), y=count)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  geom_text(aes(label = stories), vjust = 0.45, hjust=1.2, colour = "gold", size = 3) +
+  labs(title="Top 25 word pairs from NPR's climate coverage (Oct. 2022-April 2023)", 
+       x="Word Pairs", 
+       y="Number of times mentioned in NPR's climate coverage",
+       subtitle="Yellow figures show count of stories mentioning topic") +
+  scale_y_continuous(breaks=seq(0,600,by=100),
+                     minor_breaks = seq(0,600,by=25)) +
+  theme_linedraw() +
+  theme (plot.subtitle = element_text(face = "italic", size=9))
+
+
+print(graph)
+ggsave(plot = graph,
+       file = "outputs/Word pairs1.png")  
+
+q2 <- bigrams_count %>%
+  arrange (-stories) %>%
+  head(25)
+
+graph2 <- ggplot(data=q2, aes(x=fct_reorder(bigram, stories), y=stories)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  #geom_text(aes(label = stories), vjust = 0.45, hjust=1.2, colour = "yellow", size = 3) +
+  labs(title="Top 25 word pairs from NPR's climate coverage (Oct. 2022-April 2023)", 
+       x="Word Pairs", 
+       y="Number of stories mentioning term in NPR's climate coverage",
+       subtitle="Evaluated from 272 articles pulled from npr.org/sections/climate/archive"
+       ) +
+  scale_y_continuous(breaks=seq(0,175,by=20)) +
+  theme_linedraw() +
+  theme (plot.subtitle = element_text(face = "italic", size=9))
+
+print(graph2)  
+ggsave(plot = graph2,
+       file = "outputs/Word pairs2.png")  
+```
+
+
+IGNORE <<< word frequency
+```{r}
+words_by_time_whole <- join_bigrams %>%
+  filter (!bigram %in% c("hide caption", "desk climate", "climate solution", "climate solutions", "digital stub", "ramirez franco", "atc digital", "digital stories", "tbd digital", "climate desk", "digital story", "lauren sommer", "stories coming", "michael copley", "margaret cirino", "nate rott", "npr hide", "getty images", "images hide", "ap hide", "npr news", "ryan kellman", "kellman npr", "apple podcasts", "npr's climate")) %>%
+  rename (word=bigram) %>%
+  mutate(time_floor = floor_date(date, unit = "1 month")) %>%
+  count(time_floor, word) %>%
+  group_by(time_floor) %>%
+  mutate(time_total = sum(n)) %>%
+  group_by(word) %>%
+  mutate(word_total = sum(n)) %>%
+  ungroup() %>%
+  rename(count = n) %>%
+  filter(word_total > 15)
+
+words_by_time_whole
+
+nested_data_whole <- words_by_time_whole %>%
+  nest(-word) 
+
+library(purrr)
+
+nested_models_whole <- nested_data_whole %>%
+  mutate(models = map(data, ~ glm(cbind(count, time_total) ~ time_floor, ., 
+                                  family = "binomial")))
+
+library(broom)
+
+slopes_whole <- nested_models_whole %>%
+  mutate(models = map(models, tidy)) %>%
+  unnest(cols = c(models)) %>%
+  filter(term == "time_floor") %>%
+  mutate(adjusted.p.value = p.adjust(p.value))
+
+top_slopes_whole <- slopes_whole %>% 
+  filter(adjusted.p.value < 0.05)
+
+top_slopes_whole
+
+words_by_time_whole$time_floor <- as.Date(words_by_time_whole$time_floor) #sets up the proper timestamp to graph Tweet frequency in the next step
+
+#GRAPH CLEANED BIGRAMS!
+q <- bigrams_count %>%
+  head(20)
+words_by_time_whole %>%
+  filter (time_floor < as.Date("2023-04-01")) %>%
+  filter (word %in% c("gas stoves", "greenhouse gas", "public health", "natural gas", "gas emissions")) %>%
+  #inner_join(q, by = c("word"="bigram")) %>%
+#  inner_join(top_slopes_whole, by = "word") %>%
+  ggplot(aes(time_floor, count/time_total, color = word)) +
+  geom_line(size = 1.3) +
+  labs(x = NULL, y = "Word frequency") +
+        scale_x_date(date_breaks = "months" , date_labels = "%b %y")
+```
+
+Checking phrases
+```{r}
+#How many stories were these terms mentioned in?
+search_terms <- bigrams_count %>%
+  #filter (n>9) %>%
+  pull (bigram)
+
+#search_terms <- c(q$bigram, "public health", "health risks")
+
+analysis <- tibble()
+for (i in 1:length(search_terms)){
+  #i <- 1
+  search <- search_terms[i]
+  step_df <- join_bigrams %>%
+    filter (bigram==search) %>%
+    distinct (headline, date, url) %>%
+    select (headline, date, url) %>%
+    mutate(time_floor = floor_date(date, unit = "1 month")) %>%
+    count(time_floor) %>%
+    adorn_totals() %>%
+    mutate (bigram=search) 
+  
+  analysis <- bind_rows (analysis, step_df)
+}
+
+analysis2 <- analysis %>%
+  filter(row_number()<60483) %>%
+  pivot_wider (names_from = "time_floor",
+               values_from = "n",
+               values_fill = 0)
+
+analysis2 %>%
+  slice_max(n=25, Total) %>%
+ggplot(aes(x=fct_reorder(bigram, Total), y=Total)) +
+  geom_bar(stat="identity") + coord_flip() + 
+  labs(title="Top 25 word pairs from NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories")
+
+write_csv (analysis2, "bigrams_story_count.csv")
+
+analysis2 <- read_csv( "bigrams_story_count.csv")
+
+#only two stories mention mental health or health concerns
+topic1 <- analysis2 %>%
+  filter (str_detect (bigram, "health") & Total > 1) %>%
+  slice_max (n=25, Total) %>%
+ggplot(aes(x=fct_reorder(bigram, Total,), y=Total)) +
+  geom_bar(stat="identity") + coord_flip() + 
+  scale_y_continuous(breaks=seq(1,13,by=1)) +
+  labs(title="\"Health\" within NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw()
+
+print(topic1)  
+ggsave(plot = topic1,
+       file = "outputs/Word pairs-health.png")  
+
+#half-dozen mention indigenous people
+topic2 <- analysis2 %>%
+  filter (str_detect (bigram, "\\bnative|indigenous|tribal\\b") & Total > 1) %>%
+  filter (!bigram %in% c("native species", "native plants")) %>%
+  slice_max (n=25, Total) %>%
+ggplot(aes(x=fct_reorder(bigram, Total,), y=Total)) +
+  geom_bar(stat="identity") + coord_flip() + 
+  scale_y_continuous(breaks=seq(1,13,by=1)) +
+  labs(title="\"Native\" within NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw() 
+
+print(topic2)  
+ggsave(plot = topic2,
+       file = "outputs/Word pairs-native.png")  
+
+#half-dozen mention flaring
+topic3 <- analysis2 %>%
+  filter (str_detect (bigram, "flare|flaring") ) %>%
+  filter (!bigram %in% c("flare melilla", "eyes flare")) %>%
+  slice_max (n=25, Total) %>%
+ggplot(aes(x=fct_reorder(bigram, Total,), y=Total)) +
+  geom_bar(stat="identity") + coord_flip() + 
+  scale_y_continuous(breaks=seq(1,13,by=1)) +
+  labs(title="\"Flaring\" within NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw() 
+
+print(topic3)  
+ggsave(plot = topic3,
+       file = "outputs/Word pairs-flaring.png")  
+
+#half-dozen mention flaring
+topic4 <- analysis2 %>%
+  filter (str_detect (bigram, "flare|flaring") ) %>%
+  filter (!bigram %in% c("flare melilla", "eyes flare")) %>%
+  slice_max (n=25, Total) %>%
+ggplot(aes(x=fct_reorder(bigram, Total,), y=Total)) +
+  geom_bar(stat="identity") + coord_flip() + 
+  scale_y_continuous(breaks=seq(1,13,by=1)) +
+  labs(title="\"Flaring\" within NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw() +
+  theme (plot.subtitle = element_text(face = "italic", size=9))
+
+print(topic3)  
+ggsave(plot = topic3,
+       file = "outputs/Word pairs-flaring.png")  
+```
+
+
+
+
+
+
+words_by_time_whole %>%
+  inner_join (q, by=c("word"="bigram")) %>%
+  mutate (time_floor=as.character(time_floor)) %>%
+  ggplot(aes(x=fct_reorder(word, count), y=count)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  facet_wrap(~time_floor) #+
+  labs(title="Top 25 word pairs from NPR's climate briefs (Oct. 2022-April 2023)", x="Word Pairs", y="Count")
+  
+words_by_time_whole %>%
+  inner_join (q, by=c("word"="bigram")) %>%
+  mutate (time_floor=as.character(time_floor)) %>%
+  ggplot(aes(x=time_floor, y=count, group=word, color=word)) +
+  geom_line(size = 1.3) 
+  geom_line() + 
+  coord_flip() + 
+  facet_wrap(~time_floor) #+
+  labs(title="Top 25 word pairs from NPR's climate briefs (Oct. 2022-April 2023)", x="Word Pairs", y="Count")  
+
+```
+
+
+
+
+
+```{r}
+html2 <- html %>%
+  html_nodes ("a") %>%
+  html_text()
+
+elem_chemp <- remDr$findElement(using="xpath", value="/html/body/main/div[2]/div[2]/div[5]/div/article[256]/div/div/p/a/time")
+
+
+webElem <- remDr$findElement("css", "body")
+
+for (i in 1:20){
+webElem$sendKeysToElement(list(key = "down_arrow"))
+#webElem$sendKeysToElement(list(key = "escape"))
+  Sys.sleep(1)
+}
+webElem$sendKeysToElement(list(key = "end"))
+
+#Click on log in
+remDr$findElement("id", "sbLogInCta")$clickElement()
+remDr$findElement("id", "sbxJxRegEmail")$sendKeysToElement(list("fastar@miamioh.edu"))
+Sys.sleep(1)
+remDr$findElement("id", "sbxJxRegPswd")$sendKeysToElement(list("zuvqat-sygqyh-mevhY8"))
+Sys.sleep(1)
+remDr$findElement("id", "loginBtn")$clickElement()
+Sys.sleep(8)
+```
+
+
+
+
+
+
+
+
+```{r}
+# Load the required libraries
+library(tm)
+library(SnowballC)
+library(wordcloud)
+
+# Read the email data
+emails <- read_csv("C:/Users/afast/Documents/Outlook Files/climate_briefs.csv")
+
+# Convert the text data to a Corpus object
+corpus <- Corpus(VectorSource(c_briefs3$body_text_body))
+
+# Convert the text to lowercase
+corpus <- tm_map(corpus, content_transformer(tolower))
+
+# Remove stopwords and punctuations
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, removePunctuation)
+
+# Stem the words
+corpus <- tm_map(corpus, stemDocument)
+
+# Create a document term matrix
+dtm <- DocumentTermMatrix(corpus)
+
+# Generate a wordcloud
+freq <- sort(rowSums(as.matrix(dtm)), decreasing = TRUE)
+wordcloud(names(freq), freq, min.freq = 50, random.order = FALSE)
+```
+```{r}
+# Perform sentiment analysis
+library(tidytext)
+library(dplyr)
+sentiments <- get_sentiments("afinn")
+sentiment_scores <- corpus %>% unnest_tokens(word, text) %>% 
+  inner_join(sentiments) %>% group_by(document) %>% 
+  summarise(sentiment_score = sum(value)) %>% ungroup()
+
+# Print the sentiment scores
+sentiment_scores
+```
+
+
+```{r}
+#Remove names
+stop <- c("Neela", "Banerjee", "Babits", "Sadie", "Andrea", "Kissack", "Jeff Brady",
+          "Planner details:", "Planner details here:", "https://newsflexbeta.npr.org/app/cardboard/251/", "Good morning, everyone", "Good morning, NPR", "Good morning, ", "For all story queries, please contact editors Neela Banerjee or Sadie Babits via email here:", "climate-eds@npr.org")
+c_briefs2 <- c_briefs2 %>%
+  mutate (body = str_remove_all(body_text_body, paste(stop, collapse = "|")))
+```
+
+
+
+```{r}
+# load necessary packages
+library(tm)
+library(dplyr)
+library(ggplot2)
+
+# read in emails from a CSV file
+emails <- read.csv("emails.csv", stringsAsFactors = FALSE)
+
+# create a corpus from the email body text
+corpus <- Corpus(VectorSource(c_briefs2$body))
+corpus <- Corpus(VectorSource(join$body))
+
+# clean and preprocess the text data
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, stemDocument)
+
+# create a document term matrix
+dtm <- DocumentTermMatrix(corpus)
+
+# compute the frequency of each word
+freq <- colSums(as.matrix(dtm))
+
+# sort the words by frequency in descending order
+sorted_freq <- sort(freq, decreasing = TRUE)
+
+# create a data frame with the top 50 words and their frequencies
+top_words <- head(data.frame(word = names(sorted_freq), freq = sorted_freq), 50)
+
+# plot a bar chart of the top 50 words
+ggplot(top_words, aes(x = word, y = freq)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+

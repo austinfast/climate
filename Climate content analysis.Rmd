@@ -1,0 +1,546 @@
+---
+title: "Textual analysis of NPR's climate coverage"
+author: "by Austin Fast"
+date: "April 6, 2023"
+#output: html_document
+output: 
+  html_document:
+    code_folding: show
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    theme: cosmo
+---
+
+Load R libraries
+```{r message = FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(lubridate)
+library(data.table)
+library(tidytext)
+library(rvest)
+library(httr)
+library(wdman)
+```
+
+# Scrape NPR.org
+NPR disables automated access, so spin up a Selenium server to build list of story headlines and links from <b><a href="https://www.npr.org/sections/climate/archive" target="_blank">NPR's Climate archive</a></b> going back to Oct. 1, 2022.
+
+![](npr-climate2.png)
+```{r eval=FALSE}
+#Start Selenium server
+selServ <- selenium(
+  port = 4444L,
+  version = 'latest',
+  chromever = '103.0.5060.134'
+)
+
+remDr <- remoteDriver(
+  remoteServerAddr = 'localhost',
+  port = 4444L,
+  browserName = 'firefox'
+)
+
+Sys.sleep(5)
+
+#Open browser
+remDr$open()
+
+#Go to NPR's climate archive, starting from today
+climate <- paste0("https://www.npr.org/sections/climate/archive?date=", format(Sys.Date(), format="%m-%d-%Y"))
+remDr$navigate(climate)
+Sys.sleep(5)
+
+#Grab HTML source code
+source <- remDr$getPageSource()[[1]]
+
+#Page is dynamically rendered as a user scrolls, so scroll down page until September's stories load
+while (!str_detect(source, "datetime=\"2022-09-29\"")){
+  webElem <- remDr$findElement("css", "body")
+
+  webElem$sendKeysToElement(list(key = "down_arrow"))
+  Sys.sleep(1)
+  source <- remDr$getPageSource()[[1]]
+}
+
+#Read in the page source
+page <- read_html(source)
+
+#Pull links for all stories since October
+links <- page %>%
+  html_nodes ("h2") %>%
+  html_nodes ("a") %>%
+  html_attr('href') %>%
+  as.data.frame() %>%
+  magrittr::set_colnames("url")
+
+#Pull headlines for all stories since October
+headline <- page %>%
+  html_nodes ("h2") %>%
+  html_nodes ("a") %>%
+  html_text() %>%
+  as.data.frame() %>%
+  magrittr::set_colnames("headline")
+
+#Calculate date published from URL - 2 failed to parse because Short Wave episodes are named differently
+date <- links %>%
+  mutate (date = str_remove_all(url, "^https://www.npr.org/")) %>%
+  mutate (date = str_remove_all(date, "^sections/goatsandsoda/")) %>%
+  mutate (date = str_remove_all(date, "^sections/pictureshow/")) %>%
+  mutate (date = str_remove_all(date, "^sections/health-shots/")) %>%
+  mutate (date = ymd(substr(date,1,10)))
+
+#Check any dates that don't start with numbers?
+date %>%
+  filter (!str_detect(date, "[0-9]"))
+
+#Create list of articles to scrape
+df <- cbind (date, headline) %>%
+  #Keep only those since Oct. 1, 2022
+  filter (date > as.Date('2022-09-30'))
+```
+
+# Check results
+```{r message=FALSE}
+df <- read_csv("npr_scrape.csv") %>% select (2,3,1)
+
+head (df)
+```
+
+# Scrape story text
+This code takes the list of URLs and headlines created above and visits each URL in sequence to scrape the story text, byline and other details. It also remove unnecessary words, like reporter names, NPR jargon and descriptions of ambient sound that appear frequently but are not representative of the text corpus.
+
+<div style="width:500px; height:333px">
+![](npr-climate3.png)
+</div>
+```{r eval=FALSE}
+output <- tibble()
+
+for (i in 1:length(df$url)){
+#for (i in 1:20){
+  #i <- 9
+  link <- df$url[i]
+  #page <- html_session(link)
+  #html <- content(page$response)
+
+  remDr$navigate(link)
+  Sys.sleep(4)
+  
+  source <- remDr$getPageSource()[[1]]
+  html <- read_html(source)
+  done=0
+  
+  #Pull body of story (DACS Transcript version)
+  if (length(html %>%
+    html_nodes(xpath="//*[@class='transcript storytext']") %>%
+    html_text()) > 0){
+    
+      html2 <- html %>%
+        html_nodes(xpath="//*[@class='transcript storytext']") %>%
+        html_text() %>%
+        #Remove speaker names and descriptions of ambient sound
+        str_remove_all("(\\b[A-Z]+ *\\b[:]*){2,}") %>% #remove two words in all caps that may or may not have a space after them (names, ambi)
+        str_remove_all ("[, ]*[A-Z]+:") %>% #remove words with a colon after them (, BYLINE:, HOST:, etc.)
+        str_remove_all ("\\(\\)") %>%
+        str_remove_all ("A MARTÍNEZ") %>%
+        str_squish()
+        
+      #Delete content after copyright notice
+      html2 <- html2 %>%
+        str_split ("Copyright ©")
+      
+      #Keep only before copyright notice
+      html2 <- html2[[1]][[1]]
+      
+      done = 1
+  }
+  
+  #Pull article if it's not a DACS auto-transcript
+  #if (length(html %>%
+  #    html_nodes(xpath="//*[@class='story']") %>%
+  #    html_text()) > 0){
+  if (done==0){
+
+      html2 <- html %>%
+        html_nodes(xpath="//*[@id='storytext']") %>%
+        html_nodes("p") %>%
+        #Unsuccessfully tried to remove photo captions at top
+        #html_nodes("p>:not(xpath='//*[@class='credit-caption']") %>%
+        #html_attrs(">:not(xpath='//*[@class='credit-caption']')") %>%
+        html_text() %>%
+        #Remove speaker names and descriptions of ambient sound
+        str_remove_all("(\\b[A-Z]+ *\\b[:]*){2,}") %>% #remove two words in all caps that may or may not have a space after them (names, ambi)
+        str_remove_all ("[, ]*[A-Z]+:") %>% #remove words with a colon after them (, BYLINE:, HOST:, etc.)
+        str_remove_all ("\\(\\)") %>%
+        str_remove_all ("A MARTÍNEZ") %>%
+        str_remove_all ("Enlarge this image") %>%
+        as.character %>%
+        str_squish() %>%
+        toString 
+        
+    #Delete content after phrase "More Stories From"
+      html2 <- html2 %>%
+        str_split ("More Stories From")
+      
+      #Keep only before copyright notice
+      html2 <- html2[[1]][[1]]
+  
+  }
+  
+  #Check that I've pulled an article and break for loop if it's missing
+  check <- length(html2)
+  if (check<1){
+    stop ("ERROR")
+  }
+  
+  #Pull byline
+  byline <- html %>%
+    html_nodes(xpath="//*[@id='storybyline']/div/div/div/p") %>%
+    html_text() %>%
+    str_squish() %>%
+    toString()
+  
+  #Pull slug (climate, weather, national, etc.)
+  slug <- html %>%
+    html_node(xpath="//h3[@class='slug']") %>%
+    html_text() %>%
+    str_squish() %>%
+    toString()
+    
+  #Save to dataframe
+  this_row <- tibble(byline=byline, body=html2, slug=slug)
+  output <- bind_rows (output, this_row)
+  rm(this_row, byline, html2, html, source, done, slug, check)
+}
+
+#Join scrape results to headline, url and date
+join <- cbind (df, output)
+
+#Save file
+write_csv (join, "npr_scrape.csv")
+```
+
+# Examine results
+What desks were these stories assigned on NPR.org?
+```{r message=FALSE}
+join <- read_csv("npr_scrape.csv")
+
+#Check how are these categorized?
+join %>% 
+  count (slug) %>%
+  arrange (desc(n)) %>%
+  print
+```
+
+Take a look at first story to check it scraped properly. The all-caps names of reporters and hosts and ambient sound descriptions have been removed.
+```{r}
+join %>%
+  filter (row_number()==1) %>%
+  pull (slug) %>%
+  paste ("SLUG:", .) %>%
+  print 
+
+join %>%
+  filter (row_number()==1) %>%
+  pull (headline) %>%
+  paste ("HED:", .) %>%
+  print 
+
+join %>%
+  filter (row_number()==1) %>%
+  pull (url) %>%
+  paste ("URL:", .) %>%
+  print 
+
+join %>%
+  filter (row_number()==1) %>%
+  pull (byline) %>%
+  paste ("BYLINE:", .) %>%
+  print 
+
+join %>%
+  filter (row_number()==1) %>%
+  pull (body) %>%
+  paste ("BODY:", .) %>%
+  print 
+```
+
+# Analyze results
+This code tokenizes the text corpus to find frequency of words and word pairs within 272 stories published from Oct. 1, 2022-April 5, 2023. It does this by removing stop words, which are so common that they don't provide insight for textual analysis (e.g., "a", "an", "the").
+
+The resulting list displays how frequently almost 29,000 unique word pairs appeared in NPR's climate coverage over the last sixth months.
+```{r}
+join2 <- join %>%
+  unnest_tokens(word, body, token = "words") 
+
+#Create list of words and remove stop words
+join_words <- join2 %>%
+  anti_join(stop_words, by="word") %>%  #went from 236700 to 107524
+  filter(!str_detect(word, "http")) %>%
+  filter(!str_detect(word, "t.co")) #removed an additional few words
+
+#Remove URLs
+replace_reg <- "https?://[^\\s]+|&amp;|&lt;|&gt;|\bRT\\b"
+
+#Create list of word pairs (236430 word pairs)
+join_bigrams <- join %>% 
+  mutate(text = str_replace_all(body, replace_reg, "")) %>%
+  unnest_tokens(bigram, body, token = "ngrams", n = 2) #kept returning error until added the collapse=FALSE statement
+
+#Remove pairs containing stop words
+join_bigrams <- join_bigrams %>%
+  separate(bigram, into = c("first","second"), sep = " ", remove = FALSE) %>%
+  anti_join(stop_words, by = c("first" = "word")) %>%
+  anti_join(stop_words, by = c("second" = "word")) %>% #went from 236430 to 46028
+  filter(str_detect(first, "[a-z]") &
+         str_detect(second, "[a-z]")) %>% #goes to 43675
+  filter(!str_detect(bigram, "t.co"))  #Reduced bigrams to 43490
+
+#Count how many times each word appears in all coverage
+words_count <- join_words %>%
+  group_by(word) %>%
+  count() %>%
+  arrange(-n) %>%
+  print
+
+#Count how many times each word pair appears in all coverage
+#28726 unique word pairs
+bigrams_count <- join_bigrams %>%
+  group_by(bigram) %>%
+  summarize (count = n(),
+          stories = n_distinct(url)) %>%
+  arrange(-count) %>%
+  #Manually remove frequent word pairs that are inherent to NPR (reporter names, npr processes, etc)
+  filter (!bigram %in% c("hide caption", "desk climate", "digital stub", "ramirez franco", "atc digital", "digital stories", "tbd digital", "climate desk", "digital story", "lauren sommer", "stories coming", "michael copley", "margaret cirino", "nate rott", "npr hide", "getty images", "images hide", "ap hide", "npr news", "ryan kellman", "kellman npr", "apple podcasts", "npr's climate")) %>%
+  print 
+```
+
+# Visualization
+## Total word frequency
+This code pulls out top 25 bigrams by the total count of appearances across all stories published in this six-month period.
+```{r}
+q <- bigrams_count %>%
+  head(25)
+  
+graph <- ggplot(data=q, aes(x=fct_reorder(bigram, count), y=count)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  geom_text(aes(label = stories), vjust = 0.45, hjust=1.2, colour = "gold", size = 3) +
+  labs(title="Top 25 word pairs from NPR's climate coverage (10/22-04/23)", 
+       x="Word Pairs", 
+       y="Number of times mentioned in NPR's climate coverage",
+       subtitle="Yellow figures show count of stories mentioning topic") +
+  scale_y_continuous(breaks=seq(0,600,by=100),
+                     minor_breaks = seq(0,600,by=25)) +
+  theme_linedraw() +
+  theme (plot.subtitle = element_text(face = "italic", size=9))
+
+print(graph)
+ggsave(plot = graph,
+       file = "outputs/Word pairs1.png")  
+```
+
+## Story frequency
+The phrase "responsible solar" was included 37 times in just one story published Feb. 18, 2023, and the phrase "heat pumps" was mentioned three dozen times in two stories at the end of March, so these are not truly frequently covered topics. 
+
+Instead, this code charts the number of unique articles in which each topic appeared on NPR.org.
+```{r}
+q2 <- bigrams_count %>%
+  arrange (-stories) %>%
+  head(25)
+
+graph2 <- ggplot(data=q2, aes(x=fct_reorder(bigram, stories), y=stories)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  #geom_text(aes(label = stories), vjust = 0.45, hjust=1.2, colour = "yellow", size = 3) +
+  labs(title="Top 25 word pairs from NPR's climate coverage (10/22-04/23)", 
+       x="Word Pairs", 
+       y="Number of stories mentioning term in NPR's climate coverage",
+       subtitle="Evaluated from 272 articles pulled from npr.org/sections/climate/archive"
+       ) +
+  scale_y_continuous(breaks=seq(0,175,by=20)) +
+  theme_linedraw() +
+  theme (plot.subtitle = element_text(face = "italic", size=9))
+
+print(graph2)  
+ggsave(plot = graph2,
+       file = "outputs/Word pairs2.png")  
+```
+
+## Checking phrases
+
+### Health
+<b>Question: How many stories mentioned "health"?</b> <br>
+<b>Answer</b>: Only two stories mention "mental health" or "health concerns."
+
+```{r}
+topic1 <- bigrams_count %>%
+  filter (str_detect (bigram, "health")) %>%
+  slice_max (n=25, stories) %>%
+  head (25) %>%
+  ggplot(aes(x=fct_reorder(bigram, stories,), y=stories)) +
+  geom_bar(stat="identity") + coord_flip() + 
+  scale_y_continuous(breaks=seq(1,13,by=1)) +
+  labs(title="\"Health\" within NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw()
+
+print(topic1)  
+ggsave(plot = topic1,
+       file = "outputs/Word pairs-health.png")  
+```
+
+Which stories reference the most frequent health topic?
+```{r}
+search_term <- bigrams_count %>%
+  filter (str_detect (bigram, "health")) %>%
+  slice_max (n=1, stories) %>%
+  pull (bigram)
+  
+join_bigrams %>%
+  filter (str_detect (bigram, search_term)) %>%
+  select (bigram, date, headline, url) %>%
+  distinct (bigram, date, headline, url) %>%
+  print
+```
+
+### Native American
+<b>Question: How many stories mentioned "Native", "indigenous", or "tribal"?</b> <br>
+<b>Answer</b>: A half-dozen mention indigenous people.
+```{r}
+topic2 <- bigrams_count %>%
+  filter (str_detect (bigram, "\\bnative|indigenous|tribal\\b")) %>%
+  filter (!bigram %in% c("native species", "native plants")) %>%
+  slice_max (n=25, stories) %>%
+  head (25) %>%
+  ggplot(aes(x=fct_reorder(bigram, stories,), y=stories)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  scale_y_continuous(breaks=seq(1,13,by=1)) +
+  labs(title="\"Native\" within NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw() 
+
+print(topic2)  
+ggsave(plot = topic2,
+       file = "outputs/Word pairs-native.png")  
+```
+
+Which stories reference the most frequent topic connected to Native Americans, indigenous or tribal issues?
+```{r}
+search_term <- bigrams_count %>%
+  filter (str_detect (bigram, "\\bnative|indigenous|tribal\\b")) %>%
+  slice_max (n=1, stories) %>%
+  pull (bigram)
+  
+join_bigrams %>%
+  filter (str_detect (bigram, search_term)) %>%
+  select (bigram, date, headline, url) %>%
+  distinct (bigram, date, headline, url) %>%
+  print
+```
+
+### Flaring
+<b>Question: How many stories mentioned "flare" or "flaring"?</b> <br>
+<b>Answer</b>: Very few stories. Just three separate stories had any mention of these terms, and one was AP copy.
+```{r}
+#Very few stories mention flaring
+topic3 <- bigrams_count %>%
+  filter (str_detect (bigram, "flare|flaring")) %>%
+  filter (!bigram %in% c("flare melilla", "eyes flare")) %>%
+  slice_max (n=25, stories) %>%
+  head (25) %>%
+  ggplot(aes(x=fct_reorder(bigram, stories,), y=stories)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  scale_y_continuous(breaks=seq(1,13,by=1)) +
+  labs(title="\"Flaring\" within NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw() 
+
+print(topic3)  
+ggsave(plot = topic3,
+       file = "outputs/Word pairs-flaring.png")  
+```
+
+Which stories reference flaring?
+```{r}
+join_bigrams %>%
+  filter (str_detect (bigram, "flare|flaring")) %>%
+  filter (!bigram %in% c("flare melilla", "eyes flare")) %>%
+  select (bigram, date, headline, url) %>%
+  distinct (bigram, date, headline, url) %>%
+  print
+```
+
+## Chart story frequency over time
+```{r eval=FALSE}
+#How many stories were these terms mentioned in?
+search_terms <- bigrams_count %>%
+  #filter (n>9) %>%
+  pull (bigram)
+
+#search_terms <- c(q$bigram, "public health", "health risks")
+
+analysis <- tibble()
+for (i in 1:length(search_terms)){
+  #i <- 1
+  search <- search_terms[i]
+  step_df <- join_bigrams %>%
+    filter (bigram==search) %>%
+    distinct (headline, date, url) %>%
+    select (headline, date, url) %>%
+    mutate(time_floor = floor_date(date, unit = "1 month")) %>%
+    count(time_floor) %>%
+    adorn_totals() %>%
+    mutate (bigram=search) 
+  
+  analysis <- bind_rows (analysis, step_df)
+}
+
+analysis2 <- analysis %>%
+  #filter(row_number()<60483) %>%
+  pivot_wider (names_from = "time_floor",
+               values_from = "n",
+               values_fill = 0)
+
+write_csv (analysis2, "bigrams_story_count.csv")
+```
+
+## How has the frequency of these topics varied over time?
+```{r message=FALSE}
+analysis2 <- read_csv( "bigrams_story_count.csv")
+
+#Double check story count performed above
+#analysis2 %>%
+#  slice_max(n=25, Total) %>%
+#  ggplot(aes(x=fct_reorder(bigram, Total), y=Total)) +
+#  geom_bar(stat="identity") + coord_flip() + 
+#  labs(title="Top word pairs in NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") %>%
+#  print
+
+search_terms <- analysis2 %>%
+  slice_max(Total, n=5) %>%
+  pull (bigram)
+
+#Chart top 5 topics' frequency over time
+graph4 <- analysis2 %>%
+  filter (bigram %in% search_terms) %>%
+  select (-c(Total, `2023-04-01`)) %>%
+  pivot_longer (cols=(2:7),
+                names_to="date", 
+                values_to="value") %>%
+  mutate (date = ymd(date)) %>%
+  ggplot(aes(x=date, y=value, group=bigram, color=bigram)) +
+  geom_line() +
+  geom_line(size = 1.3) +
+  scale_x_date(date_breaks = "months" , date_labels = "%b '%y") + 
+  labs(title="Most frequent topics within NPR's climate coverage", 
+       x=NULL, 
+       y="Count of stories",
+       color="Topic") +
+  theme_linedraw() 
+
+print(graph4)  
+ggsave(plot = graph4,
+       file = "outputs/Word pairs-over time.png")  
+```
