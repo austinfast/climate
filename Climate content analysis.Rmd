@@ -369,9 +369,7 @@ ggsave(plot = graph2,
        file = "outputs/Word pairs2.png")  
 ```
 
-## Checking phrases
-
-### Health
+## "Health"
 <b>Question: How many stories mentioned "health"?</b> <br>
 <b>Answer</b>: Only two stories mention "mental health" or "health concerns."
 
@@ -405,7 +403,7 @@ join_bigrams %>%
   print
 ```
 
-### Native American
+## "Native American"
 <b>Question: How many stories mentioned "Native", "indigenous", or "tribal"?</b> <br>
 <b>Answer</b>: A half-dozen mention indigenous people.
 ```{r}
@@ -440,7 +438,7 @@ join_bigrams %>%
   print
 ```
 
-### Flaring
+## "Flaring"
 <b>Question: How many stories mentioned "flare" or "flaring"?</b> <br>
 <b>Answer</b>: Very few stories. Just three separate stories had any mention of these terms, and one was AP copy.
 ```{r}
