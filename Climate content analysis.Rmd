@@ -472,7 +472,7 @@ join_bigrams %>%
   print
 ```
 
-## Chart story frequency over time
+This code creates a data frame showing count of stories mentioning each bigram for each month, to show change over time.
 ```{r eval=FALSE}
 #How many stories were these terms mentioned in?
 search_terms <- bigrams_count %>%
@@ -505,6 +505,8 @@ analysis2 <- analysis %>%
 
 write_csv (analysis2, "bigrams_story_count.csv")
 ```
+
+## Chart story frequency over time
 
 ```{r message=FALSE}
 analysis2 <- read_csv( "bigrams_story_count.csv")
