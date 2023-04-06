@@ -506,7 +506,6 @@ analysis2 <- analysis %>%
 write_csv (analysis2, "bigrams_story_count.csv")
 ```
 
-## How has the frequency of these topics varied over time?
 ```{r message=FALSE}
 analysis2 <- read_csv( "bigrams_story_count.csv")
 
