@@ -12,6 +12,39 @@ output:
     theme: cosmo
 ---
 
+# Findings
+The climate desk's archive on NPR.org includes <b>nearly 300 pieces published since October 2022</b>. 
+
+* Just four stories mention the phrase "human health" and <a href="https://www.npr.org/2023/03/12/1162933860/californias-pajaro-river-breached-overnight-friday-causing-massive-flooding" target="_blank">only two</A> mention "<a href="https://www.npr.org/2023/01/07/1147678843/bay-area-residents-are-preparing-for-the-russian-river-to-flood-again-early-next
+" target="_blank">mental health</A>," emphasizing the need for a reporter to cover how climate change is affecting our health. 
+* Native Americans are among several disadvantaged communities of people who are more vulnerable to climate change, and the small number of stories I found about this group suggests NPR is underreporting a community that's facing outsized effects of climate change. For example, I only found <a href="https://www.npr.org/2022/12/07/1140861347/un-biodiversity-convention-aims-to-slow-humanitys-war-with-nature-heres-whats-at-" target="_blank">two stories</a> mentioning <a href="https://www.npr.org/2022/12/06/1141047752/delegates-meet-with-a-mandate-to-set-global-biodiversity-goals-for-the-next-ten-" target="_blank">their displacement</a>.
+* People living in poverty are less-equipped to mitigate the effects of climate change. NPR's coverage mentions the phrase "low-income" in 18 stories, largely due to a proposal to <a href="https://www.npr.org/2022/11/16/1136817427/low-income-countries-want-more-money-for-climate-damage-theyre-unlikely-to-get-i" target="_blank">boost clean energy</A> in <a href="https://www.npr.org/2022/11/09/1135546822/u-s-plan-for-boosting-climate-investment-in-low-income-countries-draws-criticism
+" target="_blank">developing countries</a> at the United Nations Climate Change Conference in November, but ongoing coverage of the connection between poverty and climate change has been far more scarce.
+* Few articles mentioned [sewer overflows](#sewer) and [methane flaring](#flaring), suggesting space to follow up on the pitches I mentioned in my cover letter.
+
+
+
+![](outputs/Word pairs-over time.png){width=90%}
+
+***
+
+![](outputs/Word pairs-health.png){width=90%}
+
+***
+
+![](outputs/Word pairs-native.png){width=90%}
+
+***
+
+![](outputs/Word pairs-poverty.png){width=90%}
+
+***
+
+# Methodology
+NPR disables automated access to its website through GET requests, so I spun up a Selenium server to build a list of story headlines and links from <b><a href="https://www.npr.org/sections/climate/archive" target="_blank">NPR's Climate archive</a></b> going back to Oct. 1, 2022.
+
+![](npr-climate2.png)
+
 Load R libraries
 ```{r message = FALSE, warning=FALSE}
 library(tidyverse)
@@ -25,12 +58,8 @@ library(httr)
 library(wdman)
 ```
 
-# Scrape NPR.org
-NPR disables automated access, so spin up a Selenium server to build list of story headlines and links from <b><a href="https://www.npr.org/sections/climate/archive" target="_blank">NPR's Climate archive</a></b> going back to Oct. 1, 2022.
-
-![](npr-climate2.png)
+The archive website doesn't load all links until a user manually scrolls down on the page. This code uses a Selenium browser to scroll until September's stories start to appear. It then scrapes all the headlines, dates and URLs.
 ```{r eval=FALSE}
-#Start Selenium server
 selServ <- selenium(
   port = 4444L,
   version = 'latest',
@@ -92,7 +121,7 @@ date <- links %>%
   mutate (date = str_remove_all(date, "^sections/health-shots/")) %>%
   mutate (date = ymd(substr(date,1,10)))
 
-#Check any dates that don't start with numbers?
+#Check for any dates that don't start with numbers? This should be zero.
 date %>%
   filter (!str_detect(date, "[0-9]"))
 
@@ -102,7 +131,7 @@ df <- cbind (date, headline) %>%
   filter (date > as.Date('2022-09-30'))
 ```
 
-# Check results
+# Check links
 ```{r message=FALSE}
 df <- read_csv("npr_scrape.csv") %>% select (2,3,1)
 
@@ -234,7 +263,7 @@ join %>%
   print
 ```
 
-Take a look at first story to check it scraped properly. The all-caps names of reporters and hosts and ambient sound descriptions have been removed.
+Take a look at the first story to check it scraped properly. The all-caps names of reporters and hosts and ambient sound descriptions have been removed.
 ```{r}
 join %>%
   filter (row_number()==1) %>%
@@ -268,9 +297,9 @@ join %>%
 ```
 
 # Analyze results
-This code tokenizes the text corpus to find frequency of words and word pairs within 272 stories published from Oct. 1, 2022-April 5, 2023. It does this by removing stop words, which are so common that they don't provide insight for textual analysis (e.g., "a", "an", "the").
+This code tokenizes the text corpus to find frequency of words and word pairs within 272 stories published from Oct. 1, 2022-April 5, 2023. It also removes stop words, which are so common that they don't provide insight for textual analysis (e.g., "a", "an", "the").
 
-The resulting list displays how frequently almost 29,000 unique word pairs appeared in NPR's climate coverage over the last sixth months.
+The resulting list displays how frequently almost 29,000 unique word pairs appeared in NPR's climate coverage over the last six months.
 ```{r}
 join2 <- join %>%
   unnest_tokens(word, body, token = "words") 
@@ -319,7 +348,7 @@ bigrams_count <- join_bigrams %>%
 
 # Visualization
 ## Total word frequency
-This code pulls out top 25 bigrams by the total count of appearances across all stories published in this six-month period.
+This code displays the top 25 word pairs by the total count of appearances across all stories published in this six-month period.
 ```{r}
 q <- bigrams_count %>%
   head(25)
@@ -328,7 +357,7 @@ graph <- ggplot(data=q, aes(x=fct_reorder(bigram, count), y=count)) +
   geom_bar(stat="identity") + 
   coord_flip() + 
   geom_text(aes(label = stories), vjust = 0.45, hjust=1.2, colour = "gold", size = 3) +
-  labs(title="Top 25 word pairs from NPR's climate coverage (10/22-04/23)", 
+  labs(title="Top 25 word pairs from NPR's climate coverage (Oct. 2022-April 2023)", 
        x="Word Pairs", 
        y="Number of times mentioned in NPR's climate coverage",
        subtitle="Yellow figures show count of stories mentioning topic") +
@@ -355,7 +384,7 @@ graph2 <- ggplot(data=q2, aes(x=fct_reorder(bigram, stories), y=stories)) +
   geom_bar(stat="identity") + 
   coord_flip() + 
   #geom_text(aes(label = stories), vjust = 0.45, hjust=1.2, colour = "yellow", size = 3) +
-  labs(title="Top 25 word pairs from NPR's climate coverage (10/22-04/23)", 
+  labs(title="Top 25 word pairs from NPR's climate coverage (Oct. 2022-April 2023)", 
        x="Word Pairs", 
        y="Number of stories mentioning term in NPR's climate coverage",
        subtitle="Evaluated from 272 articles pulled from npr.org/sections/climate/archive"
@@ -378,18 +407,31 @@ topic1 <- bigrams_count %>%
   filter (str_detect (bigram, "health")) %>%
   slice_max (n=25, stories) %>%
   head (25) %>%
-  ggplot(aes(x=fct_reorder(bigram, stories,), y=stories)) +
-  geom_bar(stat="identity") + coord_flip() + 
+  mutate (bigram=fct_reorder(bigram, stories))
+
+topic1$color <- ifelse(topic1$bigram %in% c("mental health", "human health"), "red", "black")
+topic1$color <- as.factor(topic1$color)
+
+colors <- topic1$color[order(topic1$stories, topic1$bigram)]
+
+topic1 <- topic1 %>%
+  ggplot(aes(x=bigram, y=stories, fill=color)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
   scale_y_continuous(breaks=seq(1,13,by=1)) +
-  labs(title="\"Health\" within NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") +
-  theme_linedraw()
+  labs(title="\"Health\" within NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories") +
+  theme_linedraw() +
+  scale_fill_manual(values = c("#888888", "#CC3D3D")) +
+  #scale_fill_manual(values = c("mental health" = "#", "human health" = "#CC3D3D")) +
+  theme(legend.position = "none") +
+  theme(axis.text.y = element_text(color = colors))
 
 print(topic1)  
 ggsave(plot = topic1,
-       file = "outputs/Word pairs-health.png")  
+       file = "outputs/Word pairs-health.png")
 ```
 
-Which stories reference the most frequent health topic?
+Which stories reference the most frequent health topic: "public health"?
 ```{r}
 search_term <- bigrams_count %>%
   filter (str_detect (bigram, "health")) %>%
@@ -405,19 +447,30 @@ join_bigrams %>%
 
 ## "Native American"
 <b>Question: How many stories mentioned "Native", "indigenous", or "tribal"?</b> <br>
-<b>Answer</b>: A half-dozen mention indigenous people.
+<b>Answer</b>: A half-dozen mention "indigenous people."
 ```{r}
 topic2 <- bigrams_count %>%
   filter (str_detect (bigram, "\\bnative|indigenous|tribal\\b")) %>%
-  filter (!bigram %in% c("native species", "native plants")) %>%
+  filter (!bigram %in% c("native species", "native plants", "gallon native")) %>%
   slice_max (n=25, stories) %>%
   head (25) %>%
-  ggplot(aes(x=fct_reorder(bigram, stories,), y=stories)) +
+  mutate (bigram=fct_reorder(bigram, stories))
+
+topic2$color <- ifelse(topic2$bigram %in% c("displace native", "displace indigenous"), "red", "black")
+topic2$color <- as.factor(topic2$color)
+
+colors <- topic2$color[order(topic2$stories, topic2$bigram)]
+
+topic2 <- topic2 %>%
+  ggplot(aes(x=bigram, y=stories, fill=color)) +
   geom_bar(stat="identity") + 
   coord_flip() + 
   scale_y_continuous(breaks=seq(1,13,by=1)) +
-  labs(title="\"Native\" within NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") +
-  theme_linedraw() 
+  labs(title="Native American, indigenous, or tribal", x="Word Pairs", y="Count of stories in NPR's climate coverage (Oct. 2022-April 2023)") +
+  theme_linedraw() +
+  scale_fill_manual(values = c("#888888", "#CC3D3D")) +
+  theme(legend.position = "none") +
+  theme(axis.text.y = element_text(color = colors))
 
 print(topic2)  
 ggsave(plot = topic2,
@@ -432,15 +485,85 @@ search_term <- bigrams_count %>%
   pull (bigram)
   
 join_bigrams %>%
-  filter (str_detect (bigram, search_term)) %>%
+  filter (bigram==search_term) %>%
   select (bigram, date, headline, url) %>%
   distinct (bigram, date, headline, url) %>%
   print
 ```
 
+## "Disadvantaged communities"
+<b>Question: How many stories mentioned poverty, people of color or various "disadvantaged communities"?</b> <br>
+<b>Answer</b>: Low-income is mentioned in 18 stories, but most other terms are mentioned in just one story each.
+```{r}
+list <- c("disadvantaged", "low income", "low-income", "poverty")
+          #"african american", "hispanic", "latino", "asian american", "minority", "\\bblack\\b"
+          #"disability", "rural", "\\byouth\\b", "lgbt", "women", "\\btrans\\b", "\\btransit\\b")
+
+topic4 <- bigrams_count %>%
+  filter (str_detect (bigram, paste(list, collapse="|"))) %>%
+  slice_max (n=25, stories) %>%
+  #Remove false flags
+  filter (!(bigram %in% c("black browed", "black paint", "threw black", "black baseball", "black granite", "black hawk", "black lung", "black mesh", "black objects", "black robe", "black scar", "black tea", "city black", "pull black", "black bicycle"))) %>%
+  head (25) %>%
+  ggplot(aes(x=fct_reorder(bigram, stories), y=stories)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  scale_y_continuous(breaks=seq(1,20,by=1)) +
+  labs(title="Disadvantaged communities & poverty", x="Word Pairs", y="Count of stories in NPR's climate coverage (Oct. 2022-April 2023)") +
+  theme_linedraw() +
+  scale_fill_manual(values = c("#888888"))
+
+print(topic4)  
+ggsave(plot = topic4,
+       file = "outputs/Word pairs-poverty.png")  
+```
+
+Which stories reference poverty, people of color or various "disadvantaged communities"??
+```{r}
+join_bigrams %>%
+  filter (str_detect (bigram, paste(list, collapse="|"))) %>%
+  select (bigram, date, headline, url) %>%
+  distinct (date, headline, url) %>%
+  print
+```
+
+## "Sewer overflows"
+<a name="sewer"></a>
+<b>Question: How many stories mentioned sewer overflows and the health problems they cause?</b><br>
+<b>Answer</b>: Seven stories, largely dealing with the rain that's inundated California this winter.
+```{r}
+list <- c("sewer", "sewage", "overflow")
+
+topic5 <- bigrams_count %>%
+  filter (str_detect (bigram, paste(list, collapse="|"))) %>%
+  slice_max (n=25, stories) %>%
+  #Remove false flags
+#  filter (!(bigram %in% c("black browed", "black paint"))) %>%
+  head (25) %>%
+  ggplot(aes(x=fct_reorder(bigram, stories), y=stories)) +
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  scale_y_continuous(breaks=seq(1,20,by=1)) +
+  labs(title="Sewers, sewage, overflow", x="Word Pairs", y="Count of stories in NPR's climate coverage (Oct. 2022-April 2023)") +
+  theme_linedraw() 
+
+print(topic5)  
+ggsave(plot = topic5,
+       file = "outputs/Word pairs-sewer.png")  
+```
+Which stories reference sewer overflows?
+```{r}
+join_bigrams %>%
+  filter (str_detect (bigram, paste(list, collapse="|"))) %>%
+  select (bigram, date, headline, url) %>%
+  distinct (date, headline, url) %>%
+  print
+```
+
 ## "Flaring"
+<a name="flaring"></a>
 <b>Question: How many stories mentioned "flare" or "flaring"?</b> <br>
-<b>Answer</b>: Very few stories. Just three separate stories had any mention of these terms, and one was AP copy.
+<b>Answer</b>: Very few stories. Just three stories had any mention of these terms, and one was AP copy.
 ```{r}
 #Very few stories mention flaring
 topic3 <- bigrams_count %>%
@@ -452,7 +575,7 @@ topic3 <- bigrams_count %>%
   geom_bar(stat="identity") + 
   coord_flip() + 
   scale_y_continuous(breaks=seq(1,13,by=1)) +
-  labs(title="\"Flaring\" within NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") +
+  labs(title="\"Flaring\" within NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories") +
   theme_linedraw() 
 
 print(topic3)  
@@ -470,7 +593,7 @@ join_bigrams %>%
   print
 ```
 
-This code creates a data frame showing count of stories mentioning each bigram for each month, to show change over time.
+This code creates a data frame showing the count of stories mentioning each word pair in each month, to show change over time.
 ```{r eval=FALSE}
 #How many stories were these terms mentioned in?
 search_terms <- bigrams_count %>%
@@ -514,32 +637,38 @@ analysis2 <- read_csv( "bigrams_story_count.csv")
 #  slice_max(n=25, Total) %>%
 #  ggplot(aes(x=fct_reorder(bigram, Total), y=Total)) +
 #  geom_bar(stat="identity") + coord_flip() + 
-#  labs(title="Top word pairs in NPR's climate coverage (10/22-04/23)", x="Word Pairs", y="Count of stories") %>%
+#  labs(title="Top word pairs in NPR's climate coverage (Oct. 2022-April 2023)", x="Word Pairs", y="Count of stories") %>%
 #  print
 
 search_terms <- analysis2 %>%
   slice_max(Total, n=5) %>%
   pull (bigram)
 
+search_terms2 <- c(search_terms, "low income", "indigenous people", "mental health", "human health", "public health") 
+
 #Chart top 5 topics' frequency over time
 graph4 <- analysis2 %>%
-  filter (bigram %in% search_terms) %>%
+  filter (bigram %in% search_terms2) %>%
   select (-c(Total, `2023-04-01`)) %>%
   pivot_longer (cols=(2:7),
                 names_to="date", 
                 values_to="value") %>%
-  mutate (date = ymd(date)) %>%
+  mutate (date = ymd(date),
+          cat = if_else (bigram %in% search_terms, "Most frequent topics", "Selected health topics")) %>%
   ggplot(aes(x=date, y=value, group=bigram, color=bigram)) +
   geom_line() +
   geom_line(size = 1.3) +
-  scale_x_date(date_breaks = "months" , date_labels = "%b '%y") + 
-  labs(title="Most frequent topics within NPR's climate coverage", 
+  facet_wrap(~cat) + 
+  labs(title="Topic frequency within NPR's climate coverage", 
        x=NULL, 
        y="Count of stories",
        color="Topic") +
-  theme_linedraw() 
+  theme_linedraw() +
+  scale_x_date(date_breaks = "months" , date_labels = "%b") + 
+  scale_y_continuous(breaks = seq(0,55, by=5)) 
 
 print(graph4)  
 ggsave(plot = graph4,
        file = "outputs/Word pairs-over time.png")  
 ```
+
