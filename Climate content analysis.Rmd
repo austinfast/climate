@@ -22,21 +22,19 @@ The climate desk's archive on NPR.org includes <b>nearly 300 pieces published si
 " target="_blank">developing countries</a> at COP27 in November, but ongoing coverage of the connection between poverty and climate change has been far more scarce.
 * Few articles mentioned [sewer overflows](#sewer) and [methane flaring](#flaring), suggesting space to follow up on the pitches I described in my cover letter.
 
-
-
-![](outputs/Word pairs-over time.png){width=90%}
+![](outputs/Word pairs-over time.png)
 
 ***
 
-![](outputs/Word pairs-health.png){width=90%}
+![](outputs/Word pairs-health.png)
 
 ***
 
-![](outputs/Word pairs-native.png){width=90%}
+![](outputs/Word pairs-native.png)
 
 ***
 
-![](outputs/Word pairs-poverty.png){width=90%}
+![](outputs/Word pairs-poverty.png)
 
 ***
 
