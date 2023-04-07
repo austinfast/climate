@@ -12,8 +12,23 @@ output:
     theme: cosmo
 ---
 
+# Why hire a reporter with data skills?
+
+Government agencies and other institutions frequently store data and records online in clunky formats or they decline to share machine-readable data sets with journalists. Scraping from online dashboards and APIs (application programming interfaces) is one way to quickly unlock this data and mine it for story ideas. For example, coding a custom scraper for NPR's climate articles and running a textual analysis took me about two hours.
+
+Other use cases I've turned into stories: 
+
+* Automatically downloading each county's COVID-19 vaccination counts daily from the <a href="https://covid.cdc.gov/covid-data-tracker/#vaccinations_vacc-people-booster-percent-pop5" target="_blank">CDC's API</a>
+  + Story: <a href="https://www.npr.org/sections/health-shots/2021/04/20/988871651/lagging-vaccination-rates-among-rural-seniors-hint-at-brewing-rural-urban-divide" target="_blank">Lagging Vaccination Rates Among Rural Seniors Hint At Brewing Rural-Urban Divide</a>
+* Using Archive.org's API to scrape counts of ICE detainees with COVID-19 from saved versions of the <a href="https://www.ice.gov/coronavirus" target="_blank">ICE website</a> when ICE declined to share records
+  + Story: <a href="https://www.npr.org/2021/08/13/1027095025/detainees-say-ice-exposes-them-to--covid-19" target="_blank">COVID Cases Are Rising In ICE Facilities, Putting Detainees And The Public At Risk</a>
+* Extracting charitable donations to anti-abortion and abortion-rights causes from the <a href="https://pp-990-xml.s3.us-east-1.amazonaws.com/202133159349100603_public.xml?response-content-disposition=inline&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIA266MJEJYTM5WAG5Y%2F20230407%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20230407T040442Z&X-Amz-Expires=1800&X-Amz-SignedHeaders=host&X-Amz-Signature=84b029fdf86c8d8d13df74d7c4c156c8fec5c8579da504bbb1c5e9d1b74a9c9e" target="_blank">Shell Oil Company's IRS 990 form</a>
+  + Story: <a href="https://www.wwno.org/politics/2022-10-06/mississippis-latest-move-in-its-anti-abortion-agenda-a-tax-break-for-corporate-donations" target="_blank">Mississippi's latest move in its anti-abortion agenda? A tax break for corporate donations</a>
+* Scraping hundreds of comments on a proposed change to a <a href="https://www.regulations.gov/document/BOP-2023-0001-0001/comment?postedDateFrom=2022-11-04&postedDateTo=2023-02-01" target="_blank">Bureau of Prisons regulation</a> from the Federal Register's API
+  + Story: Forthcoming by Kroc Fellow Tilda Wilson
+
 # Findings
-The climate desk's archive on NPR.org includes <b>nearly 300 pieces published since October 2022</b>. 
+The <a href="https://www.npr.org/sections/climate/archive" target="_blank">climate desk's archive on NPR.org</a> includes <b>nearly 300 pieces published since October 2022</b>. 
 
 * Just four stories mention the phrase "human health" and <a href="https://www.npr.org/2023/03/12/1162933860/californias-pajaro-river-breached-overnight-friday-causing-massive-flooding" target="_blank">only two</A> mention "<a href="https://www.npr.org/2023/01/07/1147678843/bay-area-residents-are-preparing-for-the-russian-river-to-flood-again-early-next
 " target="_blank">mental health</A>," emphasizing the need for a reporter to cover how climate change is affecting our health. 
