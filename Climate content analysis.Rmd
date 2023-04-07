@@ -14,6 +14,8 @@ output:
 
 # Why hire a reporter with data skills?
 
+Anecdotes infuse heart and soul into a story, but data analysis creates an empirical backbone. It leads stories beyond the "he said" or "she said" of a few people's experiences to hold up a story's wider assertions about the world.
+
 Government agencies and other institutions frequently store data and records online in clunky formats or they decline to share machine-readable data sets with journalists. Scraping from online dashboards and APIs (application programming interfaces) is one way to quickly unlock this data and mine it for story ideas. For example, coding a custom scraper for NPR's climate articles and running a textual analysis took me about two hours.
 
 Other use cases I've turned into stories: 
